@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: securegate-nexus
+  data:
+    redis:
+      port: 6370  # embedded Redis on non-standard port to avoid conflicts
+
+jwt:
+  private-key-path: keys/private.pem
+  public-key-path: keys/public.pem
+  access-token-expiry: 900
+  issuer: securegate-nexus
+
+logging:
+  level:
+    com.securegate: DEBUG
