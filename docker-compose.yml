@@ -1,0 +1,62 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: securegate-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  auth-server:
+    build: ./auth-server
+    container_name: securegate-auth
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - JWT_PRIVATE_KEY_PATH=/app/keys/private.pem
+      - JWT_PUBLIC_KEY_PATH=/app/keys/public.pem
+    volumes:
+      - ./keys:/app/keys:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: securegate-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - JWT_PUBLIC_KEY_PATH=/app/keys/public.pem
+      - AUTH_SERVER_URL=http://auth-server:8081
+      - INTERNAL_SERVICE_URL=http://internal-service:8082
+    volumes:
+      - ./keys:/app/keys:ro
+    depends_on:
+      - redis
+      - auth-server
+
+  internal-service:
+    build: ./internal-service
+    container_name: securegate-internal
+    ports:
+      - "8082:8082"
+    environment:
+      - JWT_PUBLIC_KEY_PATH=/app/keys/public.pem
+    volumes:
+      - ./keys:/app/keys:ro
+    depends_on:
+      - auth-server
+
+volumes:
+  redis_data:

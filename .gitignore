@@ -1,0 +1,49 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys
+keys/*.pem
+!keys/.gitkeep
+
+# Docker
+redis_data/
+
+# Logs
+*.log
+
+# Downloaded skills / agents
+.agents/
+skills-lock.json
+
+# Graphify generated output
+graphify-out/
+
+# Project reference materials (IEEE PDFs, etc.)
+Sources/
+
+# Temp / generated files (graphify leftovers, etc.)
+.graphify_*
+_run_*.py
+_merge.py
+_build.py
+_show_communities.py
+_label.py
+_viz.py
+_finalize.py

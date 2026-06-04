@@ -1,0 +1,22 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-server
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 3000ms
+
+jwt:
+  private-key-path: ${JWT_PRIVATE_KEY_PATH:keys/private.pem}
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:keys/public.pem}
+  access-token-expiry: 900     # 15 minutes in seconds
+  refresh-token-expiry: 604800  # 7 days in seconds
+  issuer: securegate-auth-server
+
+logging:
+  level:
+    com.securegate: DEBUG

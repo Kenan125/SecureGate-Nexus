@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 3000ms
+  cloud:
+    gateway:
+      routes:
+        # Route to Auth Server
+        - id: auth-server
+          uri: ${AUTH_SERVER_URL:http://localhost:8081}
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=0
+
+        # Route to Internal Service (protected)
+        - id: internal-service
+          uri: ${INTERNAL_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/**
+          filters:
+            - StripPrefix=0
+
+jwt:
+  public-key-path: ${JWT_PUBLIC_KEY_PATH:keys/public.pem}
+  allowed-algorithms:
+    - RS256
+    - RS512
+
+logging:
+  level:
+    com.securegate.gateway: DEBUG
+    org.springframework.cloud.gateway: DEBUG
