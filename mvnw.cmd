@@ -2,9 +2,7 @@
 setlocal
 
 if not defined JAVA_HOME (
-    echo ERROR: JAVA_HOME is not set.
-    echo Please set JAVA_HOME to your JDK installation directory.
-    exit /b 1
+    set "JAVA_HOME=C:\Program Files\Java\jdk-25"
 )
 
 set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
