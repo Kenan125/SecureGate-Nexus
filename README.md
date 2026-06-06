@@ -45,6 +45,7 @@ SecureGate Nexus/
 |       +-- JwtPayload.java, LoginRequest.java, RegisterRequest.java
 |       +-- TokenResponse.java, User.java, Order.java
 +-- generate-keys.ps1
++-- run.cmd
 +-- README.md
 ```
 
@@ -81,16 +82,26 @@ Request -> [1] AlgorithmValidationFilter
 
 No Docker. No external database. Everything in-memory.
 
+> **If you downloaded a ZIP from GitHub:** PowerShell blocks scripts downloaded from the internet. Either:
+> - Run `run.cmd` instead (uses cmd.exe, no block issue), or
+> - Unblock first: `Get-ChildItem *.ps1 | Unblock-File`
+
 ### Step 1 -- Generate RSA Keys
 
 ```powershell
-.\generate-keys.ps1
+powershell -ExecutionPolicy Bypass -File generate-keys.ps1
 ```
 
 Creates `keys/private.pem` (keep secret) and `keys/public.pem`.
 
 ### Step 2 -- Run the Application
 
+**Option A: Single command** (recommended on fresh download)
+```cmd
+run.cmd
+```
+
+**Option B: PowerShell**
 ```powershell
 .\mvnw.ps1 spring-boot:run
 ```
