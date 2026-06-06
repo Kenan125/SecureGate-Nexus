@@ -31,7 +31,7 @@ SecureGate Nexus/
 |   |   +-- SecurityConfig.java            # Filter chain + role-based access
 |   +-- filter/
 |   |   +-- AlgorithmValidationFilter.java  # Innovation #2: alg:none/confusion
-|   |   +-- TokenBlacklistFilter.java       # Innovation #1: Redis blacklist check
+|   |   +-- TokenBlacklistFilter.java       # Innovation #1: in-memory blacklist check
 |   |   +-- JwtAuthFilter.java              # RSA verify + Spring Security context
 |   +-- controller/
 |   |   +-- AuthController.java             # /auth/register, /login, /logout
@@ -92,7 +92,7 @@ Creates `keys/private.pem` (keep secret) and `keys/public.pem`.
 ### Step 2 -- Run the Application
 
 ```powershell
-mvnw spring-boot:run
+.\mvnw.ps1 spring-boot:run
 ```
 
 First run downloads Maven dependencies (~2 min).
@@ -192,11 +192,10 @@ Invoke-WebRequest -Uri http://localhost:8080/api/users/admin `
 ## Key Design Decisions
 
 - **RSA 2048-bit** RS256 asymmetric signing -- private key signs, public key verifies
-- **Embedded Redis** -- starts/stops with app, no Docker/install needed
 - **jti-based blacklist** -- O(1) in-memory lookup per request, auto-expires with token TTL
-- **Pure Java** -- no native binaries, no Redis, works on any OS with Java 25
+- **Pure Java** -- no native binaries, no database, works on any OS with Java 25
 - **No raw JWT forwarding** -- JwtAuthFilter sets Spring Security context directly
-- **22 files total** -- security logic, not infrastructure overhead
+- **20 files total** -- security logic, not infrastructure overhead
 
 ## References
 
