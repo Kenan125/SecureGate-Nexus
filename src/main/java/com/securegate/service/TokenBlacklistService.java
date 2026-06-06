@@ -1,29 +1,40 @@
 package com.securegate.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * INNOVATION #1: Redis-based instant token revocation.
+ * INNOVATION #1: Instant token revocation via in-memory blacklist.
+ * Pure Java — no Redis, no native binaries. Works on any OS with any JDK.
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class TokenBlacklistService {
 
-    private static final String PREFIX = "blacklist:";
-    private final StringRedisTemplate redisTemplate;
+    private final Map<String, Long> blacklist = new ConcurrentHashMap<>();
 
     public void blacklist(String jti, long ttlSeconds) {
-        redisTemplate.opsForValue().set(PREFIX + jti, "revoked", ttlSeconds, TimeUnit.SECONDS);
+        blacklist.put(jti, System.currentTimeMillis() + ttlSeconds * 1000);
         log.debug("Token blacklisted: jti={}, ttl={}s", jti, ttlSeconds);
     }
 
     public boolean isBlacklisted(String jti) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(PREFIX + jti));
+        Long expiresAt = blacklist.get(jti);
+        if (expiresAt == null) return false;
+        if (System.currentTimeMillis() > expiresAt) {
+            blacklist.remove(jti);
+            return false;
+        }
+        return true;
+    }
+
+    @Scheduled(fixedRate = 60_000)
+    public void evictExpired() {
+        long now = System.currentTimeMillis();
+        blacklist.entrySet().removeIf(e -> e.getValue() <= now);
     }
 }
