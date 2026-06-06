@@ -5,6 +5,7 @@ pom.xml.releaseBackup
 pom.xml.versionsBackup
 *.jar
 *.war
+!.mvn/wrapper/maven-wrapper.jar
 
 # IDE
 .idea/
