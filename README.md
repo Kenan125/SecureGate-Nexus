@@ -120,6 +120,8 @@ Controller (authorized)
 - **Java 21** (JDK)
 - **Docker** (for Redis)
 
+> ⚠️ **Windows folder naming:** Avoid parentheses `(1)` in your project path — they break `mvnw.cmd`. Use a simple folder name like `SecureGate-Nexus`.
+
 ### Step 1 — Start Redis
 
 ```powershell
@@ -154,6 +156,172 @@ curl.exe -s -X POST http://localhost:8080/api/v1/auth/logout -H "Authorization: 
 curl.exe -s http://localhost:8080/api/v1/secure/data -H "Authorization: Bearer TOKEN"
 # → {"error":"Security Alert: This token has been revoked. Please login again."}
 ```
+
+---
+
+## Postman Guide
+
+### Step 1 — Create a Postman Environment
+
+1. Open Postman → **Environments** (left sidebar) → **Create Environment**
+2. Name it `SecureGate Nexus Local`
+3. Add these variables:
+
+| Variable | Type | Initial Value | Current Value |
+|----------|------|---------------|---------------|
+| `baseUrl` | default | `http://localhost:8080` | `http://localhost:8080` |
+| `token` | default | *(leave empty)* | *(leave empty)* |
+
+4. Click **Save**, then select this environment from the dropdown (top-right).
+
+---
+
+### Step 2 — Register a User
+
+| Field | Value |
+|-------|-------|
+| **Method** | `POST` |
+| **URL** | `{{baseUrl}}/api/v1/auth/register` |
+| **Headers** | `Content-Type`: `application/json` |
+| **Body** (raw JSON) | See below |
+
+```json
+{
+    "username": "alice",
+    "password": "alice123456"
+}
+```
+
+**Expected response** (201 Created):
+```json
+{
+    "message": "User registered successfully",
+    "userId": "0840e33e-8332-46be-b623-ed28798e1d14",
+    "username": "alice"
+}
+```
+
+> 💡 To register as admin, add `"role": "ROLE_ADMIN"` to the body.
+
+---
+
+### Step 3 — Login & Save Token
+
+| Field | Value |
+|-------|-------|
+| **Method** | `POST` |
+| **URL** | `{{baseUrl}}/api/v1/auth/login` |
+| **Headers** | `Content-Type`: `application/json` |
+| **Body** (raw JSON) | Same as register |
+
+**Expected response** (200 OK):
+```json
+{
+    "accessToken": "eyJhbGciOiJSUzI1NiJ9.eyJpc3Mi...",
+    "tokenType": "Bearer",
+    "expiresIn": 900
+}
+```
+
+#### Auto-save the token with Postman Script
+
+In the **Tests** tab of the login request, paste:
+
+```javascript
+var json = pm.response.json();
+pm.environment.set("token", json.accessToken);
+```
+
+Now every request that needs auth will automatically use the latest token.
+
+---
+
+### Step 4 — Access Secure Data
+
+| Field | Value |
+|-------|-------|
+| **Method** | `GET` |
+| **URL** | `{{baseUrl}}/api/v1/secure/data` |
+| **Headers** | `Authorization`: `Bearer {{token}}` |
+
+**Expected response** (200 OK):
+```json
+{
+    "message": "You have accessed secure data successfully!",
+    "authenticatedUser": "0840e33e-8332-46be-b623-ed28798e1d14",
+    "authorities": ["ROLE_USER"],
+    "timestamp": "2026-06-06T20:29:29.775135700Z",
+    "data": {
+        "secretCode": "SGX-2026-SECURE",
+        "clearance": "LEVEL-4",
+        "vaultStatus": "SEALED"
+    }
+}
+```
+
+---
+
+### Step 5 — Logout (Revoke Token)
+
+| Field | Value |
+|-------|-------|
+| **Method** | `POST` |
+| **URL** | `{{baseUrl}}/api/v1/auth/logout` |
+| **Headers** | `Authorization`: `Bearer {{token}}` |
+
+**Expected response** (200 OK):
+```json
+{
+    "message": "Logged out successfully. Token revoked.",
+    "jti": "883b6dfa-27c6-4dbf-93b1-295eac10ce29"
+}
+```
+
+---
+
+### Step 6 — Verify Revocation (Same Token → Blocked)
+
+Run **Step 4** again with the same token.
+
+**Expected response** (401 Unauthorized):
+```json
+{
+    "error": "Security Alert: This token has been revoked. Please login again."
+}
+```
+
+---
+
+### Step 7 — Test Algorithm Attack (Manual)
+
+| Field | Value |
+|-------|-------|
+| **Method** | `GET` |
+| **URL** | `{{baseUrl}}/api/v1/secure/data` |
+| **Headers** | `Authorization`: `Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjMifQ.abc` |
+
+**Expected response** (401 Unauthorized):
+```json
+{
+    "error": "Security Violation: Invalid or manipulated algorithm detected"
+}
+```
+
+---
+
+### All Requests at a Glance
+
+| # | Method | URL | Headers | Body | Auth |
+|---|--------|-----|---------|------|------|
+| 1 | `POST` | `{{baseUrl}}/api/v1/auth/register` | `Content-Type: application/json` | `{"username":"alice","password":"alice123456"}` | None |
+| 2 | `POST` | `{{baseUrl}}/api/v1/auth/login` | `Content-Type: application/json` | `{"username":"alice","password":"alice123456"}` | None |
+| 3 | `GET` | `{{baseUrl}}/api/v1/secure/data` | `Authorization: Bearer {{token}}` | — | JWT |
+| 4 | `POST` | `{{baseUrl}}/api/v1/auth/logout` | `Authorization: Bearer {{token}}` | — | JWT |
+| 5 | `GET` | `{{baseUrl}}/api/v1/users/me` | `Authorization: Bearer {{token}}` | — | JWT |
+| 6 | `GET` | `{{baseUrl}}/api/v1/users/admin` | `Authorization: Bearer {{token}}` | — | JWT (ROLE_ADMIN) |
+| 7 | `GET` | `{{baseUrl}}/api/v1/orders` | `Authorization: Bearer {{token}}` | — | JWT |
+| 8 | `POST` | `{{baseUrl}}/api/v1/orders` | `Content-Type: application/json` + `Authorization: Bearer {{token}}` | `{"product":"Widget","quantity":5}` | JWT |
+| 9 | `DELETE` | `{{baseUrl}}/api/v1/orders/{id}` | `Authorization: Bearer {{token}}` | — | JWT |
 
 ---
 
