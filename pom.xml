@@ -18,7 +18,7 @@
     <description>API Security Gateway — JWT auth, Redis token revocation, algorithm filter, secure payload</description>
 
     <properties>
-        <java.version>25</java.version>
+        <java.version>21</java.version>
         <lombok.version>1.18.46</lombok.version>
     </properties>
 
@@ -34,6 +34,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Redis for token blacklist -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
         <!-- JWT: Nimbus JOSE + JWT -->

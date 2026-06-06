@@ -1,203 +1,228 @@
 # SecureGate Nexus
 
-API Security Gateway -- JWT authentication with RSA asymmetric encryption, in-memory instant token revocation, algorithm manipulation filter, and secure payload enforcement.
+API Security Gateway — JWT authentication with RSA-256 asymmetric encryption, Redis-backed instant token revocation, proactive algorithm manipulation filter, and strict secure payload enforcement.
 
-**Single Spring Boot application. No Docker, no external database -- everything self-contained.**
+**Single-module monolithic Spring Boot application. Java 21. Requires Docker Redis.**
+
+---
 
 ## Architecture
 
 ```
-Client --> SecureGate Nexus (:8080)
-              |
-              +-- Filter Chain:
-              |   [1] AlgorithmValidationFilter  -- block alg:none, HS*, missing alg
-              |   [2] TokenBlacklistFilter       -- in-memory blacklist lookup by jti
-              |   [3] JwtAuthFilter              -- RSA signature verify, set SecurityContext
-              |
-              +-- /auth/*     -- register, login, logout
-              +-- /api/orders -- CRUD (protected)
-              +-- /api/users  -- profile, admin (protected)
+Client ──▶ SecureGate Nexus (:8080)
+              │
+              ├── Proactive Filter Chain:
+              │   [1] AlgorithmValidationFilter  — blocks alg=none, HS256/384/512, missing alg
+              │   [2] TokenBlacklistFilter       — Redis blacklist lookup by jti
+              │   [3] JwtAuthFilter              — RSA-256 signature verify → SecurityContext
+              │
+              ├── /api/v1/auth/*      — register, login, logout (public)
+              ├── /api/v1/secure/data — protected demo endpoint
+              ├── /api/v1/orders/*    — CRUD (authenticated)
+              └── /api/v1/users/*     — profile, admin (authenticated)
+                   │
+Redis (:6379) ◀── token blacklist (jti → auto-expire by TTL)
 ```
+
+---
 
 ## Project Structure
 
 ```
 SecureGate Nexus/
-+-- pom.xml
-+-- src/main/resources/application.yml
-+-- src/main/java/com/securegate/
-|   +-- SecureGateApplication.java
-|   +-- config/
-|   |   +-- SecurityConfig.java            # Filter chain + role-based access
-|   +-- filter/
-|   |   +-- AlgorithmValidationFilter.java  # Innovation #2: alg:none/confusion
-|   |   +-- TokenBlacklistFilter.java       # Innovation #1: in-memory blacklist check
-|   |   +-- JwtAuthFilter.java              # RSA verify + Spring Security context
-|   +-- controller/
-|   |   +-- AuthController.java             # /auth/register, /login, /logout
-|   |   +-- OrderController.java            # /api/orders CRUD
-|   |   +-- UserController.java             # /api/users/me, /api/users/admin
-|   +-- service/
-|   |   +-- AuthService.java                # BCrypt auth, JWT, logout
-|   |   +-- JwtService.java                 # RSA RS256 signing (Nimbus)
-|   |   +-- TokenBlacklistService.java      # In-memory jti blacklist
-|   +-- model/
-|       +-- JwtPayload.java, LoginRequest.java, RegisterRequest.java
-|       +-- TokenResponse.java, User.java, Order.java
-+-- generate-keys.ps1
-+-- run.cmd
-+-- README.md
+├── pom.xml
+├── application.yml
+├── README.md
+├── generate-keys.ps1                          # optional: pre-generate RSA keys (OpenSSL)
+├── run.cmd                                    # one-click build+run
+├── keys/
+│   ├── private.pem                            # auto-generated at startup if missing
+│   └── public.pem
+└── src/main/java/com/securegate/
+    ├── SecureGateApplication.java             # @SpringBootApplication
+    ├── config/
+    │   ├── RSAKeyConfig.java                  # 2048-bit RSA keypair auto-generation
+    │   └── SecurityConfig.java                # Filter chain, CSRF disabled, STATELESS
+    ├── filter/
+    │   ├── AlgorithmValidationFilter.java      # [1] Proactive alg inspection
+    │   ├── TokenBlacklistFilter.java           # [2] Redis jti revocation check
+    │   └── JwtAuthFilter.java                  # [3] RSA signature verify + SecurityContext
+    ├── controller/
+    │   ├── AuthController.java                 # POST /api/v1/auth/{register,login,logout}
+    │   ├── SecureDataController.java           # GET  /api/v1/secure/data
+    │   ├── OrderController.java                # CRUD /api/v1/orders
+    │   └── UserController.java                 # GET  /api/v1/users/{me,admin}
+    ├── service/
+    │   ├── AuthService.java                    # BCrypt auth, user store, login/logout
+    │   ├── JwtService.java                     # RSA-256 JWT creation (Nimbus)
+    │   └── TokenBlacklistService.java          # Redis StringRedisTemplate blacklist
+    └── model/
+        ├── LoginRequest.java
+        ├── RegisterRequest.java
+        ├── TokenResponse.java
+        ├── User.java
+        ├── Order.java
+        └── JwtPayload.java
 ```
 
-**20 files total.** Focused on security logic, not infrastructure.
+**19 source files.** Production-ready, no placeholders, no TODOs.
+
+---
 
 ## 3 Security Innovations
 
 | # | Innovation | Mechanism | Mitigates |
 |---|-----------|-----------|-----------|
-| 1 | **Instant Token Revocation** | In-memory blacklist by `jti` with TTL, filter checks before auth | Stateless JWT cannot be revoked after logout |
-| 2 | **Algorithm Manipulation Filter** | Decodes JWT header, blocks `alg:none` and symmetric (HS*) algorithms | Algorithm confusion attack, none-algorithm bypass |
-| 3 | **Secure Payload Rule** | JWT contains ONLY `sub` + `scope` + `iat` + `exp` + `jti` | Base64 != encryption, payload is public |
+| 1 | **Instant Token Revocation** | Redis blacklist by `jti` with TTL matching token lifetime — checked by filter BEFORE authentication | Stateless JWT normally cannot be revoked after logout |
+| 2 | **Algorithm Manipulation Filter** | Decodes JWT header, inspects `alg` parameter BEFORE signature verification — blocks `none`, HS256/384/512, missing alg | Algorithm Confusion Attack (CWE-347), none-algorithm bypass |
+| 3 | **Secure Payload Rule** | JWT contains ONLY `sub` + `scope` + `iat` + `exp` + `jti` + `iss`. No usernames, emails, passwords, or PII | Base64 is encoding, NOT encryption — payload is public |
+
+---
 
 ## Filter Chain Order
 
 ```
-Request -> [1] AlgorithmValidationFilter
-              Block: alg=none, HS256/384/512, missing alg
-              Allow: RS256 only
-       -> [2] TokenBlacklistFilter
-              In-memory blacklist lookup by jti -> 401 if revoked
-       -> [3] JwtAuthFilter
-              RSA signature verify with public key
-              Set Spring Security context (userId + roles)
-       -> Controller
+Request
+  │
+  ▼
+[1] AlgorithmValidationFilter  @Order(-100)
+    ├── No auth header + public path? → pass through
+    ├── Decode JWT header, extract "alg"
+    ├── alg = null/missing?   → 401  {"error":"Security Violation: Invalid or manipulated algorithm detected"}
+    ├── alg = "none"?          → 401  (same)
+    ├── alg = HS256/384/512?  → 401  (same)
+    └── alg = RS256?          → pass to next filter
+  │
+  ▼
+[2] TokenBlacklistFilter       @Order(-90)
+    ├── Extract "jti" from JWT payload
+    ├── Check Redis: EXISTS blacklist:<jti>?
+    │   ├── YES → 401  {"error":"Security Alert: This token has been revoked. Please login again."}
+    │   └── NO  → pass to next filter
+  │
+  ▼
+[3] JwtAuthFilter              @Order(-80)
+    ├── Verify RSA-256 signature with public key
+    ├── Check exp (expiration)
+    ├── Extract sub + scope (STRICT: no PII)
+    └── Set Spring SecurityContext (UsernamePasswordAuthenticationToken)
+  │
+  ▼
+Controller (authorized)
 ```
 
-## Step-by-Step Setup
+---
+
+## Setup & Run
 
 ### Prerequisites
 
-- **Java 25** ([Oracle JDK](https://www.oracle.com/java/))
-- **Git for Windows** (for OpenSSL -- key generation only)
+- **Java 21** (JDK)
+- **Docker** (for Redis)
 
-No Docker. No external database. Everything in-memory.
-
-> **If you downloaded a ZIP from GitHub:** PowerShell blocks scripts downloaded from the internet. Either:
-> - Run `run.cmd` instead (uses cmd.exe, no block issue), or
-> - Unblock first: `Get-ChildItem *.ps1 | Unblock-File`
-
-### Step 1 -- Generate RSA Keys
+### Step 1 — Start Redis
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File generate-keys.ps1
+docker run -d --name redis -p 6379:6379 redis:7-alpine
 ```
 
-Creates `keys/private.pem` (keep secret) and `keys/public.pem`.
+### Step 2 — Run the Application
 
-### Step 2 -- Run the Application
-
-**Option A: Single command** (recommended on fresh download)
-```cmd
-run.cmd
-```
-
-**Option B: PowerShell**
 ```powershell
-.\mvnw.ps1 spring-boot:run
+.\mvnw.cmd clean spring-boot:run
 ```
 
-First run downloads Maven dependencies (~2 min).
-
+On first startup, RSA keys are auto-generated into `keys/private.pem` and `keys/public.pem`.
 Wait for: `Started SecureGateApplication in X seconds`
 
-### Step 3 -- Test
+### Step 3 — Test the Full Flow
 
 ```powershell
-# Register
-Invoke-WebRequest -Uri http://localhost:8080/auth/register `
-  -Method POST -ContentType "application/json" `
-  -Body '{"username":"alice","password":"secret123"}' -UseBasicParsing
-# Expected: 201 Created
+# Register a user
+curl.exe -s -X POST http://localhost:8080/api/v1/auth/register -H "Content-Type: application/json" --% -d "{\"username\":\"alice\",\"password\":\"alice123456\"}"
 
-# Login -> get JWT
-$r = Invoke-WebRequest -Uri http://localhost:8080/auth/login `
-  -Method POST -ContentType "application/json" `
-  -Body '{"username":"alice","password":"secret123"}' -UseBasicParsing
-$token = ($r.Content | ConvertFrom-Json).accessToken
+# Login → copy the accessToken
+curl.exe -s -X POST http://localhost:8080/api/v1/auth/login -H "Content-Type: application/json" --% -d "{\"username\":\"alice\",\"password\":\"alice123456\"}"
 
-# Access protected API
-Invoke-WebRequest -Uri http://localhost:8080/api/orders `
-  -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
-# Expected: 200 OK, []
+# Access secure data (paste real token)
+curl.exe -s http://localhost:8080/api/v1/secure/data -H "Authorization: Bearer TOKEN"
 
-# Create order
-Invoke-WebRequest -Uri http://localhost:8080/api/orders `
-  -Method POST -ContentType "application/json" `
-  -Headers @{"Authorization"="Bearer $token"} `
-  -Body '{"product":"Widget","quantity":5}' -UseBasicParsing
-# Expected: 201 Created
+# Logout → revoke token in Redis
+curl.exe -s -X POST http://localhost:8080/api/v1/auth/logout -H "Authorization: Bearer TOKEN"
+
+# Try again → BLOCKED!
+curl.exe -s http://localhost:8080/api/v1/secure/data -H "Authorization: Bearer TOKEN"
+# → {"error":"Security Alert: This token has been revoked. Please login again."}
 ```
 
-### Step 4 -- Verify All 3 Security Innovations
+---
 
-#### Innovation #1: Instant Token Revocation
+## API Reference
 
-```powershell
-# Logout -> token goes to in-memory blacklist
-Invoke-WebRequest -Uri http://localhost:8080/auth/logout `
-  -Method POST -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
-# -> 200 "Logged out successfully. Token revoked."
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `POST` | `/api/v1/auth/register` | None | Register new user |
+| `POST` | `/api/v1/auth/login` | None | Login, returns JWT |
+| `POST` | `/api/v1/auth/logout` | Bearer | Revoke token in Redis |
+| `GET` | `/api/v1/secure/data` | Bearer | Demo secure endpoint |
+| `GET` | `/api/v1/users/me` | Bearer | Current user profile |
+| `GET` | `/api/v1/users/admin` | Bearer (ROLE_ADMIN) | Admin-only endpoint |
+| `GET` | `/api/v1/orders` | Bearer | List user's orders |
+| `POST` | `/api/v1/orders` | Bearer | Create order |
+| `GET` | `/api/v1/orders/{id}` | Bearer | Get order by ID |
+| `DELETE` | `/api/v1/orders/{id}` | Bearer | Delete order |
 
-# Same token -> BLOCKED (even though signature still valid!)
-Invoke-WebRequest -Uri http://localhost:8080/api/orders `
-  -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
-# -> 401 "Token has been revoked. Please login again."
-```
+---
 
-#### Innovation #2: Algorithm Manipulation Filter
-
-```powershell
-# alg=none attack (JWT with no signature)
-Invoke-WebRequest -Uri http://localhost:8080/api/orders `
-  -Headers @{"Authorization"="Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxMjMifQ.abc"} -UseBasicParsing
-# -> 401 "Security violation: 'none' algorithm detected"
-```
-
-#### Innovation #3: Secure Payload
-
-Decode any JWT at [jwt.io](https://jwt.io). Payload contains only: `sub`, `scope`, `iat`, `exp`, `jti`, `iss`. No passwords, emails, or PII -- Base64 is encoding, not encryption.
-
-### Step 5 -- Admin Role Test
-
-```powershell
-# Register admin
-Invoke-WebRequest -Uri http://localhost:8080/auth/register `
-  -Method POST -ContentType "application/json" `
-  -Body '{"username":"admin","password":"admin123!","role":"ROLE_ADMIN"}' -UseBasicParsing
-
-# Login as admin
-$ar = Invoke-WebRequest -Uri http://localhost:8080/auth/login `
-  -Method POST -ContentType "application/json" `
-  -Body '{"username":"admin","password":"admin123!"}' -UseBasicParsing
-$at = ($ar.Content | ConvertFrom-Json).accessToken
-
-# Access admin endpoint
-Invoke-WebRequest -Uri http://localhost:8080/api/users/admin `
-  -Headers @{"Authorization"="Bearer $at"} -UseBasicParsing
-# -> 200 "Admin access granted"
-```
-
-## JWT Payload (Secure Payload Rule)
+## JWT Payload (Strict Payload Rule)
 
 ```json
 {
-  "sub": "user-uuid",
+  "sub": "0840e33e-8332-46be-b623-ed28798e1d14",
   "scope": "ROLE_USER",
-  "iat": 1686000000,
-  "exp": 1686000900,
-  "jti": "unique-token-id",
+  "iat": 1780777726,
+  "exp": 1780778626,
+  "jti": "883b6dfa-27c6-4dbf-93b1-295eac10ce29",
   "iss": "securegate-nexus"
 }
+```
+
+**Never included:** usernames, emails, passwords, personal data. Base64 is encoding, not encryption.
+
+---
+
+## Configuration
+
+All settings in `src/main/resources/application.yml`:
+
+```yaml
+server:
+  port: 8080
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  keys-dir: keys
+  access-token-expiry: 900       # seconds (15 minutes)
+  issuer: securegate-nexus
+```
+
+---
+
+## Security Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Java 21** | LTS release, avoids Redis/Lettuce compatibility issues with Java 25 |
+| **RSA-256 (RS256)** | Asymmetric — private key signs, public key verifies. No shared secrets |
+| **Nimbus JOSE+JWT** | Same library Spring Security uses internally for OAuth2/JWT |
+| **Redis for blacklist** | Instant revocation, automatic TTL cleanup, survives app restart |
+| **Proactive alg filter first** | Saves CPU — rejects bad tokens before expensive RSA verification |
+| **Single module** | Maximum reliability, simple deployment, one `mvn` command |
 ```
 
 ## Key Design Decisions

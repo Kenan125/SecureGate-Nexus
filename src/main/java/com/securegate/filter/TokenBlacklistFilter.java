@@ -1,5 +1,6 @@
 package com.securegate.filter;
 
+import com.nimbusds.jwt.SignedJWT;
 import com.securegate.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -12,12 +13,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import java.text.ParseException;
 
 /**
- * INNOVATION #1: Instant Token Revocation.
- * Runs SECOND. Extracts jti from JWT, checks in-memory blacklist.
+ * Token Blacklist Filter — runs SECOND in the security chain.
+ *
+ * Implements INSTANT TOKEN REVOCATION by checking Redis for blacklisted
+ * JWT IDs (jti). If the token has been revoked (logout), the request
+ * is blocked before it reaches the controller layer.
  */
 @Component
 @Order(-90)
@@ -25,63 +28,76 @@ import java.util.Base64;
 @Slf4j
 public class TokenBlacklistFilter extends OncePerRequestFilter {
 
+    private static final String ERROR_BODY =
+            "{\"error\":\"Security Alert: This token has been revoked. Please login again.\"}";
+
     private final TokenBlacklistService blacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                      HttpServletResponse response,
-                                     FilterChain chain) throws ServletException, IOException {
-        String auth = request.getHeader("Authorization");
+                                     FilterChain chain)
+            throws ServletException, IOException {
+
+        String authHeader = request.getHeader("Authorization");
         String path = request.getRequestURI();
 
-        if (auth == null || !auth.startsWith("Bearer ")) {
-            if (path.startsWith("/auth/register") || path.startsWith("/auth/login")) {
+        // Allow public auth endpoints through without a token
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (isPublicPath(path)) {
                 chain.doFilter(request, response);
                 return;
             }
-            sendError(response, 401, "Missing Authorization header");
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "{\"error\":\"Missing Authorization header\"}");
             return;
         }
 
         try {
-            String token = auth.substring(7);
+            String token = authHeader.substring(7);
             String jti = extractJti(token);
-            if (jti == null) {
-                sendError(response, 401, "Invalid token: missing jti");
+
+            if (jti == null || jti.isEmpty()) {
+                log.warn("BLACKLIST FILTER: Token missing jti claim, IP={}",
+                        request.getRemoteAddr());
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                        "{\"error\":\"Invalid token: missing JWT ID (jti)\"}");
                 return;
             }
 
             if (blacklistService.isBlacklisted(jti)) {
-                log.warn("REVOKED TOKEN: jti={}", jti);
-                sendError(response, 401, "Token has been revoked. Please login again.");
+                log.warn("BLACKLIST FILTER: Revoked token detected — jti={}, IP={}",
+                        jti, request.getRemoteAddr());
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED, ERROR_BODY);
                 return;
             }
+
+            // Token is not blacklisted — proceed to next filter
             chain.doFilter(request, response);
-        } catch (Exception e) {
-            sendError(response, 401, "Invalid token format");
+
+        } catch (ParseException e) {
+            log.warn("BLACKLIST FILTER: Malformed JWT, IP={}",
+                    request.getRemoteAddr());
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED,
+                    "{\"error\":\"Invalid JWT format\"}");
         }
     }
 
-    private String extractJti(String token) {
-        String[] parts = token.split("\\.");
-        if (parts.length < 2) return null;
-        String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-        int start = payload.indexOf("\"jti\"");
-        if (start == -1) return null;
-        int colon = payload.indexOf(":", start);
-        int q1 = -1, q2 = -1;
-        for (int i = colon + 1; i < payload.length(); i++) {
-            if (payload.charAt(i) == '"') {
-                if (q1 == -1) q1 = i + 1;
-                else { q2 = i; break; }
-            }
-        }
-        return q2 > q1 ? payload.substring(q1, q2) : null;
+    private String extractJti(String token) throws ParseException {
+        SignedJWT jwt = SignedJWT.parse(token);
+        return jwt.getJWTClaimsSet().getJWTID();
     }
 
-    private void sendError(HttpServletResponse response, int status, String msg) throws IOException {
+    private boolean isPublicPath(String path) {
+        return path.startsWith("/api/v1/auth/register")
+                || path.startsWith("/api/v1/auth/login");
+    }
+
+    private void sendError(HttpServletResponse response, int status, String body)
+            throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
-        response.getWriter().write("{\"error\":\"" + msg + "\"}");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(body);
     }
 }
