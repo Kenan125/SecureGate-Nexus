@@ -1,8 +1,8 @@
 # SecureGate Nexus
 
-API Security Gateway -- JWT authentication with RSA asymmetric encryption, Redis-based instant token revocation, algorithm manipulation filter, and secure payload enforcement.
+API Security Gateway -- JWT authentication with RSA asymmetric encryption, in-memory instant token revocation, algorithm manipulation filter, and secure payload enforcement.
 
-**Single Spring Boot application. No Docker, no external Redis -- everything self-contained.**
+**Single Spring Boot application. No Docker, no external database -- everything self-contained.**
 
 ## Architecture
 
@@ -11,14 +11,12 @@ Client --> SecureGate Nexus (:8080)
               |
               +-- Filter Chain:
               |   [1] AlgorithmValidationFilter  -- block alg:none, HS*, missing alg
-              |   [2] TokenBlacklistFilter       -- Redis EXISTS blacklist:<jti>
+              |   [2] TokenBlacklistFilter       -- in-memory blacklist lookup by jti
               |   [3] JwtAuthFilter              -- RSA signature verify, set SecurityContext
               |
               +-- /auth/*     -- register, login, logout
               +-- /api/orders -- CRUD (protected)
               +-- /api/users  -- profile, admin (protected)
-              
-              Embedded Redis (:6370) -- token blacklist, auto-started
 ```
 
 ## Project Structure
@@ -31,7 +29,6 @@ SecureGate Nexus/
 |   +-- SecureGateApplication.java
 |   +-- config/
 |   |   +-- SecurityConfig.java            # Filter chain + role-based access
-|   |   +-- RedisConfig.java               # Embedded Redis startup
 |   +-- filter/
 |   |   +-- AlgorithmValidationFilter.java  # Innovation #2: alg:none/confusion
 |   |   +-- TokenBlacklistFilter.java       # Innovation #1: Redis blacklist check
@@ -43,7 +40,7 @@ SecureGate Nexus/
 |   +-- service/
 |   |   +-- AuthService.java                # BCrypt auth, JWT, logout
 |   |   +-- JwtService.java                 # RSA RS256 signing (Nimbus)
-|   |   +-- TokenBlacklistService.java      # Redis SETEX/EXISTS
+|   |   +-- TokenBlacklistService.java      # In-memory jti blacklist
 |   +-- model/
 |       +-- JwtPayload.java, LoginRequest.java, RegisterRequest.java
 |       +-- TokenResponse.java, User.java, Order.java
@@ -51,13 +48,13 @@ SecureGate Nexus/
 +-- README.md
 ```
 
-**22 files total.** Focused on security logic, not infrastructure.
+**20 files total.** Focused on security logic, not infrastructure.
 
 ## 3 Security Innovations
 
 | # | Innovation | Mechanism | Mitigates |
 |---|-----------|-----------|-----------|
-| 1 | **Instant Token Revocation** | Redis blacklist by `jti`, filter checks before auth | Stateless JWT cannot be revoked after logout |
+| 1 | **Instant Token Revocation** | In-memory blacklist by `jti` with TTL, filter checks before auth | Stateless JWT cannot be revoked after logout |
 | 2 | **Algorithm Manipulation Filter** | Decodes JWT header, blocks `alg:none` and symmetric (HS*) algorithms | Algorithm confusion attack, none-algorithm bypass |
 | 3 | **Secure Payload Rule** | JWT contains ONLY `sub` + `scope` + `iat` + `exp` + `jti` | Base64 != encryption, payload is public |
 
@@ -68,7 +65,7 @@ Request -> [1] AlgorithmValidationFilter
               Block: alg=none, HS256/384/512, missing alg
               Allow: RS256 only
        -> [2] TokenBlacklistFilter
-              Redis EXISTS blacklist:<jti> -> 401 if revoked
+              In-memory blacklist lookup by jti -> 401 if revoked
        -> [3] JwtAuthFilter
               RSA signature verify with public key
               Set Spring Security context (userId + roles)
@@ -79,10 +76,10 @@ Request -> [1] AlgorithmValidationFilter
 
 ### Prerequisites
 
-- **Java 17+** ([Adoptium](https://adoptium.net/))
+- **Java 25** ([Oracle JDK](https://www.oracle.com/java/))
 - **Git for Windows** (for OpenSSL -- key generation only)
 
-No Docker. No external Redis. No database. Embedded Redis starts/stops with the app.
+No Docker. No external database. Everything in-memory.
 
 ### Step 1 -- Generate RSA Keys
 
@@ -98,7 +95,7 @@ Creates `keys/private.pem` (keep secret) and `keys/public.pem`.
 mvnw spring-boot:run
 ```
 
-First run downloads Maven dependencies (~2 min). Embedded Redis starts automatically on port 6370.
+First run downloads Maven dependencies (~2 min).
 
 Wait for: `Started SecureGateApplication in X seconds`
 
@@ -135,7 +132,7 @@ Invoke-WebRequest -Uri http://localhost:8080/api/orders `
 #### Innovation #1: Instant Token Revocation
 
 ```powershell
-# Logout -> token goes to Redis blacklist
+# Logout -> token goes to in-memory blacklist
 Invoke-WebRequest -Uri http://localhost:8080/auth/logout `
   -Method POST -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
 # -> 200 "Logged out successfully. Token revoked."
@@ -196,7 +193,8 @@ Invoke-WebRequest -Uri http://localhost:8080/api/users/admin `
 
 - **RSA 2048-bit** RS256 asymmetric signing -- private key signs, public key verifies
 - **Embedded Redis** -- starts/stops with app, no Docker/install needed
-- **jti-based blacklist** -- O(1) Redis lookup per request, auto-expires with token
+- **jti-based blacklist** -- O(1) in-memory lookup per request, auto-expires with token TTL
+- **Pure Java** -- no native binaries, no Redis, works on any OS with Java 25
 - **No raw JWT forwarding** -- JwtAuthFilter sets Spring Security context directly
 - **22 files total** -- security logic, not infrastructure overhead
 

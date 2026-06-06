@@ -17,7 +17,7 @@ import java.util.Base64;
 
 /**
  * INNOVATION #1: Instant Token Revocation.
- * Runs SECOND. Extracts jti from JWT, checks Redis blacklist.
+ * Runs SECOND. Extracts jti from JWT, checks in-memory blacklist.
  */
 @Component
 @Order(-90)
