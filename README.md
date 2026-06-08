@@ -147,7 +147,6 @@ Controller (authorized)
 - **Java 21** (JDK)
 - **Docker** (for Redis)
 
-> ⚠️ **Windows folder naming:** Avoid parentheses `(1)` in your project path — they break `mvnw.cmd`. Use a simple folder name like `SecureGate-Nexus`.
 
 ### Step 1 — Start Redis
 
