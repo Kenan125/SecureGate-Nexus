@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureGate Nexus — Sign In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(163,163,163,.25);border-top-color:#a3a3a3;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body class="min-h-screen bg-black text-[#a3a3a3] antialiased flex flex-col items-center justify-center px-6 py-12">
+
+    <div class="w-full max-w-sm">
+        <div class="flex flex-col items-center mb-8">
+            <div class="w-11 h-11 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a] flex items-center justify-center mb-5">
+                <span class="text-sm font-semibold text-[#737373] tracking-tight">SN</span>
+            </div>
+            <h1 class="text-lg font-semibold text-white tracking-tight">SecureGate Nexus</h1>
+            <p class="text-xs text-[#a3a3a3] mt-1.5">Secure access gateway</p>
+        </div>
+
+        <form id="loginForm" class="bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-5 space-y-3">
+            <input type="text" id="loginUsername" placeholder="Username" autocomplete="username" required
+                   class="w-full px-4 py-2.5 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+            <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required
+                   class="w-full px-4 py-2.5 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+            <button type="submit" id="loginSubmitBtn"
+                    class="w-full bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all rounded-md py-2 px-4 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                Sign In
+            </button>
+        </form>
+
+        <p id="loginStatus" class="mt-4 text-xs text-center text-[#737373] hidden"></p>
+
+        <p id="successMsg" class="mt-4 text-xs text-center text-[#e5e5e5] hidden">Account created successfully. Sign in to continue.</p>
+
+        <p class="mt-6 text-center">
+            <a href="/register.html" class="text-xs text-[#737373] hover:text-[#e5e5e5] transition-colors">
+                No account? Register
+            </a>
+        </p>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+        var API_BASE = '/api/v1';
+        var loginForm = document.getElementById('loginForm');
+        var loginUsername = document.getElementById('loginUsername');
+        var loginPassword = document.getElementById('loginPassword');
+        var loginSubmitBtn = document.getElementById('loginSubmitBtn');
+        var loginStatus = document.getElementById('loginStatus');
+        var successMsg = document.getElementById('successMsg');
+
+        // Show success message if redirected from registration
+        if (window.location.search.indexOf('registered=1') !== -1) {
+            successMsg.classList.remove('hidden');
+        }
+
+        // Auto-redirect if already authenticated (check sessionStorage)
+        var stored = null;
+        try { stored = sessionStorage.getItem('sg_accessToken'); } catch (e) {}
+        if (stored) {
+            fetch(API_BASE + '/users/me', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + stored }
+            }).then(function (r) {
+                if (r.ok) window.location.replace('/home.html');
+                else { try { sessionStorage.removeItem('sg_accessToken'); } catch (e) {} }
+            }).catch(function () {});
+        }
+
+        function setLoading(btn, isLoading, text) {
+            btn.disabled = isLoading;
+            btn.innerHTML = isLoading ? '<span class="spinner"></span>' + text : text;
+        }
+
+        function showStatus(msg) {
+            loginStatus.textContent = msg;
+            loginStatus.classList.remove('hidden');
+        }
+
+        loginForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var u = loginUsername.value.trim();
+            var p = loginPassword.value;
+            if (!u || !p) { showStatus('Username and password required.'); return; }
+
+            setLoading(loginSubmitBtn, true, 'Signing in...');
+            try {
+                var res = await fetch(API_BASE + '/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, password: p })
+                });
+                if (res.ok) {
+                    var data = await res.json();
+                    sessionStorage.setItem('sg_accessToken', data.accessToken);
+                    window.location.replace('/home.html');
+                } else {
+                    var body = await res.json().catch(function () { return {}; });
+                    showStatus(body.error || 'Authentication failed.');
+                }
+            } catch (err) {
+                showStatus('Network error: ' + err.message);
+            } finally {
+                setLoading(loginSubmitBtn, false, 'Sign In');
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

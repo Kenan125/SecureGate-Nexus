@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureGate Nexus — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(163,163,163,.25);border-top-color:#a3a3a3;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body class="min-h-screen bg-black text-[#a3a3a3] antialiased">
+
+    <div id="loadingOverlay" class="min-h-screen flex items-center justify-center">
+        <div class="text-center">
+            <div class="spinner" style="width:24px;height:24px;border-width:3px;display:inline-block"></div>
+            <p class="text-xs text-[#737373] mt-4">Verifying session...</p>
+        </div>
+    </div>
+
+    <div id="dashboardContent" class="hidden min-h-screen px-6 py-10 sm:py-12">
+        <div class="max-w-4xl mx-auto">
+            <header class="flex items-center justify-between mb-8">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a] flex items-center justify-center">
+                        <span class="text-xs font-semibold text-[#737373]">SN</span>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-semibold text-white">SecureGate Nexus</h1>
+                        <p id="dashboardUser" class="text-xs text-[#a3a3a3] mt-0.5"></p>
+                    </div>
+                </div>
+                <button type="button" id="signOutBtn"
+                        class="bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all rounded-md py-2 px-4 text-xs font-medium">
+                    Sign Out
+                </button>
+            </header>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <!-- Generate Token -->
+                <section class="bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-5">
+                    <h2 class="text-xs font-medium text-white uppercase tracking-widest">Generate Token</h2>
+                    <p class="text-xs text-[#a3a3a3] mt-1.5 mb-4 leading-relaxed">Issue a fresh RS256 JWT signed with RSA-2048.</p>
+
+                    <button type="button" id="generateBtn"
+                            class="w-full bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all rounded-md py-2 px-4 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                        Generate Token
+                    </button>
+
+                    <div class="mt-4 bg-black border border-[#1a1a1a] rounded-md p-4 min-h-[72px]">
+                        <p class="text-[10px] uppercase tracking-widest text-[#737373] mb-2">Secure Output</p>
+                        <div class="font-mono text-xs leading-relaxed break-all">
+                            <span class="text-[#525252]">[</span><span id="generatedToken" class="text-[#e5e5e5]"></span><span class="text-[#525252]">]</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Attack & Verification Lab -->
+                <section class="bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-5">
+                    <h2 class="text-xs font-medium text-white uppercase tracking-widest">Attack &amp; Verification Lab</h2>
+                    <p class="text-xs text-[#a3a3a3] mt-1.5 mb-4 leading-relaxed">Inject payloads or edit tokens to probe proactive filters.</p>
+
+                    <textarea id="tokenInput" rows="6" placeholder="Token auto-populated on login/generation..." spellcheck="false"
+                              class="w-full px-4 py-3 text-xs font-mono leading-relaxed bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md resize-none min-h-[120px] transition-all"></textarea>
+
+                    <div class="flex flex-col sm:flex-row gap-2 mt-3">
+                        <button type="button" id="injectNoneBtn" disabled
+                                class="flex-1 bg-[#141414] border border-[#2d2d2d] text-[#a3a3a3] hover:text-white hover:border-red-900/50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#a3a3a3] disabled:hover:border-[#2d2d2d] transition-all rounded-md py-2 px-4 text-sm font-medium">
+                            Inject alg=none Payload
+                        </button>
+                        <button type="button" id="verifyBtn" disabled
+                                class="flex-1 bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-[#a3a3a3] disabled:hover:border-[#262626] disabled:hover:bg-[#141414] transition-all rounded-md py-2 px-4 text-sm font-medium">
+                            Verify &amp; Route Token
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Orders CRUD -->
+            <section class="mt-5 bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-5">
+                <h2 class="text-xs font-medium text-white uppercase tracking-widest mb-1">Orders Management</h2>
+                <p class="text-xs text-[#a3a3a3] mb-4 leading-relaxed">Create, view, and delete orders — authenticated CRUD demonstration.</p>
+
+                <form id="orderForm" class="flex flex-col sm:flex-row gap-2 mb-4">
+                    <input type="text" id="orderItem" placeholder="Item name" required
+                           class="flex-1 px-4 py-2 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+                    <input type="number" id="orderQuantity" placeholder="Qty" min="1" value="1" required
+                           class="w-24 px-3 py-2 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+                    <button type="submit" id="orderSubmitBtn"
+                            class="bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all rounded-md py-2 px-5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                        Create Order
+                    </button>
+                </form>
+                <p id="orderStatus" class="text-xs text-[#737373] mb-3 hidden"></p>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead>
+                            <tr class="border-b border-[#1a1a1a] text-[#737373] uppercase tracking-wider">
+                                <th class="py-2 pr-3 font-medium">ID</th>
+                                <th class="py-2 pr-3 font-medium">User</th>
+                                <th class="py-2 pr-3 font-medium">Product</th>
+                                <th class="py-2 pr-3 font-medium">Qty</th>
+                                <th class="py-2 pr-3 font-medium">Status</th>
+                                <th class="py-2 font-medium w-16"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody">
+                            <tr><td colspan="5" class="py-6 text-center text-[#525252]">No orders yet. Create one above.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Security Console Log -->
+            <section class="mt-5 bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg overflow-hidden">
+                <div class="flex items-center justify-between px-4 py-2.5 border-b border-[#1a1a1a]">
+                    <span class="text-[10px] font-medium uppercase tracking-[0.14em] text-[#737373]">Security Console Log</span>
+                    <span class="flex gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#262626]"></span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#262626]"></span>
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#262626]"></span>
+                    </span>
+                </div>
+                <pre id="terminal"
+                     class="px-4 py-4 text-sm font-mono leading-relaxed min-h-[88px] whitespace-pre-wrap bg-black text-[#737373]">Awaiting token verification.</pre>
+            </section>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+        var API_BASE = '/api/v1';
+
+        var currentToken = '';
+        var baselineToken = '';
+
+        // Load token from sessionStorage on startup
+        try { currentToken = sessionStorage.getItem('sg_accessToken') || ''; } catch (e) {}
+
+        // DOM refs
+        var loadingOverlay = document.getElementById('loadingOverlay');
+        var dashboardContent = document.getElementById('dashboardContent');
+        var dashboardUser = document.getElementById('dashboardUser');
+        var signOutBtn = document.getElementById('signOutBtn');
+        var generateBtn = document.getElementById('generateBtn');
+        var generatedToken = document.getElementById('generatedToken');
+        var tokenInput = document.getElementById('tokenInput');
+        var injectNoneBtn = document.getElementById('injectNoneBtn');
+        var verifyBtn = document.getElementById('verifyBtn');
+        var terminal = document.getElementById('terminal');
+        var orderForm = document.getElementById('orderForm');
+        var orderItem = document.getElementById('orderItem');
+        var orderQuantity = document.getElementById('orderQuantity');
+        var orderSubmitBtn = document.getElementById('orderSubmitBtn');
+        var orderStatus = document.getElementById('orderStatus');
+        var ordersTableBody = document.getElementById('ordersTableBody');
+
+        var TERMINAL_BASE = 'px-4 py-4 text-sm font-mono leading-relaxed min-h-[88px] whitespace-pre-wrap bg-black transition-colors duration-200';
+
+        // ================================================================
+        //  HELPERS
+        // ================================================================
+
+        function setTerminal(message, tone) {
+            terminal.textContent = message;
+            if (tone === 'ok') terminal.className = TERMINAL_BASE + ' text-[#e5e5e5]';
+            else if (tone === 'blocked') terminal.className = TERMINAL_BASE + ' text-[#dc2626]';
+            else terminal.className = TERMINAL_BASE + ' text-[#737373]';
+        }
+
+        function setButtonLoading(btn, isLoading, text) {
+            btn.disabled = isLoading;
+            btn.innerHTML = isLoading ? '<span class="spinner"></span>' + text : text;
+        }
+
+        function updateLabControls(hasToken) {
+            verifyBtn.disabled = !hasToken;
+            injectNoneBtn.disabled = !hasToken;
+        }
+
+        function populateLab(token) {
+            baselineToken = token;
+            generatedToken.textContent = token;
+            tokenInput.value = token;
+            updateLabControls(true);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function extractErrorMessage(body, fallback) {
+            if (!body) return fallback;
+            if (typeof body === 'string') return body;
+            if (body.error && typeof body.error === 'string') return body.error;
+            if (body.message) return body.message;
+            return fallback;
+        }
+
+        // ================================================================
+        //  API
+        // ================================================================
+
+        async function api(path, opts) {
+            var headers = { 'Content-Type': 'application/json' };
+            if (currentToken) headers['Authorization'] = 'Bearer ' + currentToken;
+            if (opts && opts.headers) Object.assign(headers, opts.headers);
+            var res = await fetch(API_BASE + path, {
+                method: (opts && opts.method) || 'GET',
+                headers: headers,
+                body: (opts && opts.body) || undefined
+            });
+            var text = await res.text();
+            var body = null;
+            if (text) { try { body = JSON.parse(text); } catch (e) { body = text; } }
+            return { response: res, body: body };
+        }
+
+        // ================================================================
+        //  ORDERS
+        // ================================================================
+
+        function clearOrdersTable() {
+            ordersTableBody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-[#525252]">No orders yet. Create one above.</td></tr>';
+        }
+
+        async function fetchOrders() {
+            try {
+                var result = await api('/orders');
+                if (result.response.ok && Array.isArray(result.body)) renderOrders(result.body);
+            } catch (e) {}
+        }
+
+        function renderOrders(orders) {
+            if (!orders || orders.length === 0) { clearOrdersTable(); return; }
+            ordersTableBody.innerHTML = orders.map(function (o) {
+                var shortId = (o.orderId || '').substring(0, 8);
+                return (
+                    '<tr class="border-b border-[#111111] hover:bg-[#0a0a0a] transition-colors">' +
+                    '<td class="py-2.5 pr-3 font-mono text-[#525252]">' + escapeHtml(shortId) + '...</td>' +
+                    '<td class="py-2.5 pr-3 text-[#e5e5e5]">' + escapeHtml(o.userName || o.userId || '-') + '</td>' +
+                    '<td class="py-2.5 pr-3 text-[#e5e5e5]">' + escapeHtml(o.product || '-') + '</td>' +
+                    '<td class="py-2.5 pr-3">' + (o.quantity || 0) + '</td>' +
+                    '<td class="py-2.5 pr-3 ' + (o.status === 'CREATED' ? 'text-[#e5e5e5]' : 'text-[#737373]') + '">' + escapeHtml(o.status || '-') + '</td>' +
+                    '<td class="py-2.5"><button class="text-[#525252] hover:text-[#dc2626] transition-colors text-[10px] uppercase tracking-wider" data-order-id="' + escapeHtml(o.orderId) + '">Del</button></td>' +
+                    '</tr>'
+                );
+            }).join('');
+            ordersTableBody.querySelectorAll('button[data-order-id]').forEach(function (btn) {
+                btn.addEventListener('click', function () { deleteOrder(btn.getAttribute('data-order-id')); });
+            });
+        }
+
+        async function deleteOrder(orderId) {
+            try {
+                var result = await api('/orders/' + encodeURIComponent(orderId), { method: 'DELETE' });
+                if (result.response.ok) { setTerminal('Order deleted.', 'ok'); fetchOrders(); }
+                else setTerminal('Delete failed: ' + extractErrorMessage(result.body, 'Forbidden'), 'blocked');
+            } catch (e) { setTerminal('Delete error: ' + e.message, 'blocked'); }
+        }
+
+        // ================================================================
+        //  JWT INJECTION
+        // ================================================================
+
+        function base64UrlEncode(str) {
+            var bytes = new TextEncoder().encode(str);
+            var binary = '';
+            bytes.forEach(function (b) { binary += String.fromCharCode(b); });
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function decodeJwtSegment(token, index) {
+            var part = token.split('.')[index];
+            return atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+        }
+
+        function buildAlgNoneToken(originalToken) {
+            var parts = originalToken.split('.');
+            if (parts.length !== 3) throw new Error('Invalid JWT structure.');
+            var header = JSON.parse(decodeJwtSegment(originalToken, 0));
+            header.alg = 'none';
+            return base64UrlEncode(JSON.stringify(header)) + '.' + parts[1] + '.';
+        }
+
+        // ================================================================
+        //  EVENTS
+        // ================================================================
+
+        signOutBtn.addEventListener('click', async function () {
+            try { await api('/auth/logout', { method: 'POST' }); } catch (e) {}
+            try { sessionStorage.removeItem('sg_accessToken'); } catch (e) {}
+            window.location.replace('/login.html');
+        });
+
+        generateBtn.addEventListener('click', async function () {
+            setButtonLoading(generateBtn, true, 'Generating...');
+            try {
+                var result = await api('/auth/token', { method: 'GET' });
+                if (result.response.ok && result.body && result.body.accessToken) {
+                    currentToken = result.body.accessToken;
+                    populateLab(currentToken);
+                    setTerminal('Token issued. Ready to verify or inject.', 'ok');
+                } else {
+                    setTerminal('Session expired.', 'blocked');
+                    window.location.replace('/login.html');
+                }
+            } catch (e) {
+                setTerminal('Session expired.', 'blocked');
+                window.location.replace('/login.html');
+            } finally {
+                setButtonLoading(generateBtn, false, 'Generate Token');
+            }
+        });
+
+        injectNoneBtn.addEventListener('click', function () {
+            var token = tokenInput.value.trim();
+            if (!token) { setTerminal('No token to inject.', 'idle'); return; }
+            try {
+                tokenInput.value = buildAlgNoneToken(token);
+                updateLabControls(true);
+                setTerminal('alg=none payload injected. Route to test filter.', 'idle');
+            } catch (e) { setTerminal(e.message, 'blocked'); }
+        });
+
+        verifyBtn.addEventListener('click', async function () {
+            var token = tokenInput.value.trim();
+            if (!token) { setTerminal('No token to route.', 'idle'); return; }
+            var isModified = baselineToken === '' || token !== baselineToken;
+
+            setButtonLoading(verifyBtn, true, 'Verifying...');
+            try {
+                var result = await api('/secure/data', { method: 'GET', headers: { Authorization: 'Bearer ' + token } });
+                if (!isModified && result.response.status === 200) { setTerminal('200 OK: Valid RSA Signature. Access Granted.', 'ok'); return; }
+                if (isModified || result.response.status === 401) { setTerminal('401 Unauthorized: Proactive Filter Blocked Payload.', 'blocked'); return; }
+                setTerminal('Status ' + result.response.status + ': ' + extractErrorMessage(result.body, 'Rejected.'), 'blocked');
+            } catch (e) {
+                setTerminal('401 Unauthorized: Proactive Filter Blocked Payload.', 'blocked');
+            } finally {
+                setButtonLoading(verifyBtn, false, 'Verify & Route Token');
+            }
+        });
+
+        tokenInput.addEventListener('input', function () {
+            updateLabControls(!!tokenInput.value.trim());
+        });
+
+        orderForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var item = orderItem.value.trim();
+            var qty = parseInt(orderQuantity.value, 10);
+            if (!item || !qty || qty < 1) { orderStatus.textContent = 'Item and valid quantity required.'; orderStatus.classList.remove('hidden'); return; }
+            setButtonLoading(orderSubmitBtn, true, 'Creating...');
+            try {
+                var result = await api('/orders', { method: 'POST', body: JSON.stringify({ product: item, quantity: qty }) });
+                if (result.response.ok) {
+                    orderForm.reset(); orderQuantity.value = '1';
+                    orderStatus.classList.add('hidden');
+                    setTerminal('Order created: ' + item + ' x' + qty, 'ok');
+                    fetchOrders();
+                } else {
+                    orderStatus.textContent = extractErrorMessage(result.body, 'Failed.'); orderStatus.classList.remove('hidden');
+                }
+            } catch (err) {
+                orderStatus.textContent = 'Network error: ' + err.message; orderStatus.classList.remove('hidden');
+            } finally {
+                setButtonLoading(orderSubmitBtn, false, 'Create Order');
+            }
+        });
+
+        // ================================================================
+        //  INIT — verify session, then show dashboard
+        // ================================================================
+
+        async function init() {
+            if (!currentToken) {
+                window.location.replace('/login.html');
+                return;
+            }
+
+            try {
+                // Verify stored token is still valid
+                var me = await api('/users/me', { method: 'GET' });
+                if (!me.response.ok) throw new Error('Token invalid');
+
+                var username = me.body.userId || 'User';
+                var roles = (me.body.roles || []).join(', ');
+                dashboardUser.textContent = 'Signed in as ' + username + (roles ? ' [' + roles + ']' : '');
+
+                populateLab(currentToken);
+
+                // Show dashboard
+                loadingOverlay.classList.add('hidden');
+                dashboardContent.classList.remove('hidden');
+
+                fetchOrders();
+                setTerminal('Session verified. Token loaded into lab.', 'ok');
+
+            } catch (e) {
+                try { sessionStorage.removeItem('sg_accessToken'); } catch (e2) {}
+                window.location.replace('/login.html');
+            }
+        }
+
+        init();
+    })();
+    </script>
+</body>
+</html>

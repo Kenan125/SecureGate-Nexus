@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureGate Nexus — Register</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(163,163,163,.25);border-top-color:#a3a3a3;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body class="min-h-screen bg-black text-[#a3a3a3] antialiased flex flex-col items-center justify-center px-6 py-12">
+
+    <div class="w-full max-w-md">
+        <div class="mb-6 text-center">
+            <p class="text-[10px] font-medium uppercase tracking-[0.2em] text-[#737373] mb-3">Account Creation Lab</p>
+            <h1 class="text-xl font-semibold text-white tracking-tight">Register Identity</h1>
+            <p class="text-sm text-[#a3a3a3] mt-2 leading-relaxed">Provision credentials for SecureGate Nexus access.</p>
+        </div>
+
+        <form id="registerForm" class="bg-[#0d0d0d] border border-[#1a1a1a] rounded-lg p-6 space-y-4">
+            <div>
+                <label for="registerUsername" class="block text-xs font-medium text-[#e5e5e5] mb-1.5">Username</label>
+                <input type="text" id="registerUsername" autocomplete="username" required
+                       class="w-full px-4 py-2.5 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+            </div>
+            <div>
+                <label for="registerEmail" class="block text-xs font-medium text-[#e5e5e5] mb-1.5">Email Address</label>
+                <input type="email" id="registerEmail" autocomplete="email" required
+                       class="w-full px-4 py-2.5 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+            </div>
+            <div>
+                <label for="registerPassword" class="block text-xs font-medium text-[#e5e5e5] mb-1.5">Password</label>
+                <input type="password" id="registerPassword" autocomplete="new-password" required
+                       class="w-full px-4 py-2.5 text-sm bg-black border border-[#222222] text-[#e5e5e5] placeholder-[#525252] focus:outline-none focus:border-[#333333] rounded-md transition-all">
+            </div>
+            <button type="submit" id="registerSubmitBtn"
+                    class="w-full mt-2 bg-[#141414] border border-[#262626] text-[#a3a3a3] hover:text-white hover:border-[#3a3a3a] hover:bg-[#1a1a1a] transition-all rounded-md py-2.5 px-4 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                Create Account
+            </button>
+        </form>
+
+        <p id="registerStatus" class="mt-4 text-xs text-center text-[#737373] hidden"></p>
+
+        <p class="mt-6 text-center">
+            <a href="/login.html" class="text-xs text-[#737373] hover:text-[#e5e5e5] transition-colors">
+                Back to Sign In
+            </a>
+        </p>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+        var API_BASE = '/api/v1';
+        var registerForm = document.getElementById('registerForm');
+        var registerUsername = document.getElementById('registerUsername');
+        var registerEmail = document.getElementById('registerEmail');
+        var registerPassword = document.getElementById('registerPassword');
+        var registerSubmitBtn = document.getElementById('registerSubmitBtn');
+        var registerStatus = document.getElementById('registerStatus');
+
+        function setLoading(btn, isLoading, text) {
+            btn.disabled = isLoading;
+            btn.innerHTML = isLoading ? '<span class="spinner"></span>' + text : text;
+        }
+
+        function showStatus(msg) {
+            registerStatus.textContent = msg;
+            registerStatus.classList.remove('hidden');
+        }
+
+        registerForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var u = registerUsername.value.trim();
+            var em = registerEmail.value.trim();
+            var p = registerPassword.value;
+
+            if (!u || !em || !p) { showStatus('All fields are required.'); return; }
+            if (p.length < 3) { showStatus('Password must be at least 3 characters.'); return; }
+
+            setLoading(registerSubmitBtn, true, 'Creating...');
+            try {
+                var res = await fetch(API_BASE + '/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: u, email: em, password: p, role: 'ROLE_USER' })
+                });
+                if (res.ok) {
+                    window.location.replace('/login.html?registered=1');
+                } else {
+                    var body = await res.json().catch(function () { return {}; });
+                    showStatus(body.error || 'Registration failed.');
+                }
+            } catch (err) {
+                showStatus('Network error: ' + err.message);
+            } finally {
+                setLoading(registerSubmitBtn, false, 'Create Account');
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

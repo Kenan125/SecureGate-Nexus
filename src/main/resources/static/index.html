@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureGate Nexus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(163,163,163,.25);border-top-color:#a3a3a3;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body class="min-h-screen bg-black flex items-center justify-center">
+    <div class="text-center">
+        <div class="w-11 h-11 rounded-lg bg-[#0d0d0d] border border-[#1a1a1a] flex items-center justify-center mx-auto mb-5">
+            <span class="text-sm font-semibold text-[#737373] tracking-tight">SN</span>
+        </div>
+        <div class="spinner mb-3" style="display:inline-block"></div>
+        <p class="text-xs text-[#737373]">SecureGate Nexus</p>
+    </div>
+    <script>
+        // Check sessionStorage for existing token and verify it
+        var stored = null;
+        try { stored = sessionStorage.getItem('sg_accessToken'); } catch (e) {}
+        if (stored) {
+            fetch('/api/v1/users/me', {
+                method: 'GET',
+                headers: { 'Authorization': 'Bearer ' + stored }
+            }).then(function (r) {
+                window.location.replace(r.ok ? '/home.html' : '/login.html');
+            }).catch(function () {
+                window.location.replace('/login.html');
+            });
+        } else {
+            window.location.replace('/login.html');
+        }
+    </script>
+</body>
+</html>

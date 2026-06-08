@@ -52,6 +52,7 @@ public class AuthService {
         User user = User.builder()
                 .id(UUID.randomUUID().toString())
                 .username(req.getUsername())
+                .email(req.getEmail())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .role(role)
                 .build();
@@ -88,6 +89,44 @@ public class AuthService {
                 .tokenType("Bearer")
                 .expiresIn(accessTokenExpirySeconds)
                 .build();
+    }
+
+    /**
+     * Issue a fresh token for an already-authenticated user.
+     * Used by GET /auth/token endpoint (cookie-based auth).
+     *
+     * @param userId the authenticated user's ID (from SecurityContext)
+     * @return TokenResponse containing a new JWT
+     * @throws IllegalArgumentException if user not found
+     */
+    public TokenResponse refreshToken(String userId) {
+        User user = users.values().stream()
+                .filter(u -> u.getId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+
+        String token = jwtService.createAccessToken(user.getId(), user.getRole());
+        log.info("Token refreshed for userId={}", userId);
+
+        return TokenResponse.builder()
+                .accessToken(token)
+                .tokenType("Bearer")
+                .expiresIn(accessTokenExpirySeconds)
+                .build();
+    }
+
+    /**
+     * Look up a username by userId.
+     *
+     * @param userId the user's UUID
+     * @return the username, or userId as fallback if not found
+     */
+    public String getUserName(String userId) {
+        return users.values().stream()
+                .filter(u -> u.getId().equals(userId))
+                .map(User::getUsername)
+                .findFirst()
+                .orElse(userId);
     }
 
     /**

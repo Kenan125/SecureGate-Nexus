@@ -1,6 +1,8 @@
 package com.securegate.controller;
 
 import com.securegate.model.Order;
+import com.securegate.service.AuthService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,10 +16,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/v1/orders")
+@RequiredArgsConstructor
 @Slf4j
 public class OrderController {
 
     private final Map<String, Order> orders = new ConcurrentHashMap<>();
+    private final AuthService authService;
 
     @GetMapping
     public ResponseEntity<List<Order>> getOrders(Authentication auth) {
@@ -38,6 +42,7 @@ public class OrderController {
     public ResponseEntity<Order> createOrder(@RequestBody Order order, Authentication auth) {
         order.setOrderId(UUID.randomUUID().toString());
         order.setUserId(auth.getName());
+        order.setUserName(authService.getUserName(auth.getName()));
         order.setStatus("CREATED");
         orders.put(order.getOrderId(), order);
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
