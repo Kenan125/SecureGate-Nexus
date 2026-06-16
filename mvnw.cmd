@@ -1,14 +1,34 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
-set "JAVA_HOME=C:\Program Files\Java\jdk-25"
-set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
-
-if not exist "%JAVA_EXE%" (
-    echo ERROR: Java 25 not found at %JAVA_HOME%
-    echo Install JDK 25 or edit mvnw.cmd to point to the correct path.
-    exit /b 1
+:: Use JAVA_HOME if already set and valid
+if defined JAVA_HOME (
+    if exist "%JAVA_HOME%\bin\java.exe" goto :found_java
 )
+
+:: Search for any JDK 25 installation (accepts jdk-25, jdk-25.0.1, jdk25, etc.)
+for /d %%D in ("C:\Program Files\Java\jdk-25*" "C:\Program Files\Java\jdk25*" "C:\Program Files\Java\jdk-25*") do (
+    if exist "%%~D\bin\java.exe" (
+        set "JAVA_HOME=%%~D"
+        goto :found_java
+    )
+)
+
+:: Fallback: search for any JDK 21 installation (accepts jdk-21, jdk-21.0.5, jdk21, etc.)
+for /d %%D in ("C:\Program Files\Java\jdk-21*" "C:\Program Files\Java\jdk21*" "C:\Program Files\Java\jdk-21*") do (
+    if exist "%%~D\bin\java.exe" (
+        set "JAVA_HOME=%%~D"
+        goto :found_java
+    )
+)
+
+echo ERROR: No JDK 25 or JDK 21 found in "C:\Program Files\Java\"
+echo Install JDK 21+ or set JAVA_HOME to point to a valid JDK.
+exit /b 1
+
+:found_java
+set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
+echo Using Java: %JAVA_HOME%
 
 set "DIRNAME=%~dp0"
 set "DIRNAME=%DIRNAME:~0,-1%"
